@@ -1,34 +1,46 @@
 const nodemailer = require("nodemailer");
 
 exports.handler = async (event, context) => {
-  // 1. Only allow POST requests
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
+  // --- CORS HEADERS (The Secret Handshake) ---
+  const headers = {
+    "Access-Control-Allow-Origin": "*", // Allow Shopify to talk to us
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+
+  // 1. Handle the "Pre-flight" check
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers, body: "OK" };
   }
 
-  // 2. Parse the incoming data
+  // 2. Only allow POST requests
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers, body: "Method Not Allowed" };
+  }
+
+  // 3. Parse the incoming data
   let data;
   try {
     data = JSON.parse(event.body);
   } catch (e) {
-    return { statusCode: 400, body: "Invalid JSON" };
+    return { statusCode: 400, headers, body: "Invalid JSON" };
   }
 
-  // 3. Configure the Transporter (Using your SendGrid Key)
+  // 4. Configure the Transporter
   const transporter = nodemailer.createTransport({
     host: "smtp.sendgrid.net",
     port: 587,
-    secure: false, // true for 465, false for other ports
+    secure: false,
     auth: {
-      user: "apikey", // This is literally the string "apikey"
-      pass: process.env.SENDGRID_API_KEY, // This pulls your SG... key from Netlify
+      user: "apikey",
+      pass: process.env.SENDGRID_API_KEY,
     },
   });
 
-  // 4. Prepare the Email content
+  // 5. Prepare the Email content
   const mailOptions = {
-    from: '"Seven Tattoo" <bookings@seventattoolv.com>', // MUST match your verified Sender
-    to: "bookings@seventattoolv.com", // Where you want to receive the leads
+    from: '"Seven Tattoo" <bookings@seventattoolv.com>',
+    to: "bookings@seventattoolv.com",
     subject: `Vision Call App: ${data.fullName}`,
     text: `
       NEW VISION CALL REQUEST
@@ -49,20 +61,22 @@ exports.handler = async (event, context) => {
       Scale: ${data.scale}
       Source: ${data.source_link}
     `,
-    replyTo: data.email, // Allows you to hit "Reply" and email the client directly
+    replyTo: data.email,
   };
 
-  // 5. Send the email
+  // 6. Send the email
   try {
     await transporter.sendMail(mailOptions);
     return {
       statusCode: 200,
+      headers, // <--- IMPORTANT: Send headers back with success
       body: JSON.stringify({ message: "Email sent successfully!" }),
     };
   } catch (error) {
     console.error("Email Error:", error);
     return {
       statusCode: 500,
+      headers, // <--- IMPORTANT: Send headers back with error
       body: JSON.stringify({ error: "Failed to send email." }),
     };
   }
