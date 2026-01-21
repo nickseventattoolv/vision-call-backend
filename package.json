@@ -1,33 +1,12 @@
 {
-  "dependencies": {
-    "@sendgrid/mail": "^8.1.6",
-    "nodemailer": "^7.0.12"
-  },
   "name": "visioncall-landingpage",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Backend for Seven Tattoo Forms",
+  "main": "functions/submit-booking-intake.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://nickseventattoolv@github.com/nickseventattoolv/vision-call-backend.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/nickseventattoolv/vision-call-backend/issues"
-  },
-  "homepage": "https://github.com/nickseventattoolv/vision-call-backend#readme"
-}
-{
-  "name": "seven-tattoo-backend",
-  "version": "1.0.0",
-  "description": "Backend for Seven Tattoo Forms",
   "dependencies": {
-    "@sendgrid/mail": "^7.7.0"
+    "@sendgrid/mail": "^8.1.0"
   }
 }

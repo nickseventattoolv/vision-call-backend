@@ -1,6 +1,7 @@
 const sgMail = require("@sendgrid/mail");
 
 exports.handler = async (event) => {
+  // 1. HEADERS
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -11,99 +12,91 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: "" };
   }
 
+  // LOGGING: This helps us see if the function actually starts
+  console.log("--- STARTING EMAIL FUNCTION ---");
+
   try {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    // 2. SETUP SENDGRID
+    // Ensure 'SENDGRID_API_KEY' is set in Netlify Environment Variables
+    const apiKey = process.env.SENDGRID_API_KEY;
+    if (!apiKey || !apiKey.startsWith("SG.")) {
+      throw new Error("Invalid or Missing API Key");
+    }
+    sgMail.setApiKey(apiKey);
+
+    // 3. PARSE DATA
     const data = JSON.parse(event.body);
+    console.log("Received Data for:", data.fullName); // Log who is booking
 
-    // UPDATED LOGIC: Check for "VISION CALL INQUIRY"
-    const isVisionCall = data.placement === "VISION CALL INQUIRY";
-    // SET TITLE: Use "VISION CALL INQUIRY" for this form, "NEW VISION CALL REQUEST" for others
-    const emailTitle = isVisionCall
-      ? "VISION CALL INQUIRY"
-      : "NEW VISION CALL REQUEST";
-    // SET COLOR: Use dark grey for this form's header
-    const titleColor = isVisionCall ? "#333333" : "#000000";
+    // 4. UNIVERSAL LOGIC
+    const formTitle = data.formTitle || "NEW VISION CALL REQUEST";
+    const isInquiry =
+      formTitle.toUpperCase().includes("INQUIRY") ||
+      formTitle.toUpperCase().includes("CONTACT");
+    const titleColor = isInquiry ? "#333333" : "#000000";
 
+    // 5. BUILD EMAIL
     const htmlEmail = `
       <!DOCTYPE html>
       <html>
       <head>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
-          .header { background-color: ${titleColor}; color: #ffffff; padding: 20px; text-align: center; letter-spacing: 2px; }
-          .header h2 { margin: 0; font-size: 20px; text-transform: uppercase; }
-          .content { padding: 30px 20px; background-color: #ffffff; }
-          .info-grid { display: table; width: 100%; margin-bottom: 20px; }
-          .info-row { display: table-row; }
-          .info-cell { display: table-cell; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
-          .label { font-weight: bold; color: #888; width: 140px; text-transform: uppercase; font-size: 11px; vertical-align: top; }
-          .value { font-weight: 500; color: #000; font-size: 14px; }
-          .section-title { margin-top: 30px; margin-bottom: 10px; font-size: 12px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #000; display: inline-block; padding-bottom: 4px; }
-          .text-block { background-color: #f9f9f9; padding: 15px; border-radius: 4px; font-size: 14px; white-space: pre-wrap; border-left: 4px solid #000; }
-          .footer { background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 11px; color: #999; }
+          body { font-family: sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; border: 1px solid #ddd; }
+          .header { background-color: ${titleColor}; color: #fff; padding: 20px; text-align: center; }
+          .content { padding: 20px; }
+          .info-row { border-bottom: 1px solid #eee; padding: 8px 0; }
+          .label { font-weight: bold; color: #777; width: 150px; display: inline-block; }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="header">
-            <h2>${emailTitle}</h2>
-          </div>
-
+          <div class="header"><h2>${formTitle}</h2></div>
           <div class="content">
-            <div class="info-grid">
-              <div class="info-row"><span class="info-cell label">Client Name</span><span class="info-cell value">${
-                data.fullName
-              }</span></div>
-              <div class="info-row"><span class="info-cell label">Email</span><span class="info-cell value"><a href="mailto:${
-                data.email
-              }" style="color: #007bff; text-decoration: none;">${
-      data.email
-    }</a></span></div>
-              <div class="info-row"><span class="info-cell label">Phone</span><span class="info-cell value"><a href="tel:${
-                data.phone
-              }" style="color: #333; text-decoration: none;">${
-      data.phone
-    }</a></span></div>
-              <div class="info-row"><span class="info-cell label">Requested Artist</span><span class="info-cell value">${
-                data.artist || "Not Specified"
-              }</span></div>
-              <div class="info-row"><span class="info-cell label">Placement</span><span class="info-cell value">${
-                data.placement
-              }</span></div>
-              <div class="info-row"><span class="info-cell label">Scale</span><span class="info-cell value">${
-                data.scale
-              }</span></div>
-            </div>
-
-            <div class="section-title">Context / Meaning</div>
-            <div class="text-block">${data.meaning}</div>
-
-            <div class="section-title">Vision / Message</div>
-            <div class="text-block">${data.vision}</div>
-
-            <div style="margin-top: 30px; font-size: 12px; color: #aaa;">Source: ${
-              data.source_link
+            <div class="info-row"><span class="label">Name:</span> ${
+              data.fullName
             }</div>
+            <div class="info-row"><span class="label">Email:</span> <a href="mailto:${
+              data.email
+            }">${data.email}</a></div>
+            <div class="info-row"><span class="label">Phone:</span> ${
+              data.phone
+            }</div>
+            <div class="info-row"><span class="label">Artist:</span> ${
+              data.artist || "N/A"
+            }</div>
+            <div class="info-row"><span class="label">Placement:</span> ${
+              data.placement
+            }</div>
+            <div class="info-row"><span class="label">Scale:</span> ${
+              data.scale || "N/A"
+            }</div>
+            
+            <br><h3>Context / Meaning</h3>
+            <p style="background:#f9f9f9; padding:10px;">${data.meaning}</p>
+            
+            <h3>Vision / Message</h3>
+            <p style="background:#f9f9f9; padding:10px;">${data.vision}</p>
+            
+            <p style="font-size:12px; color:#aaa; margin-top:20px;">Source: ${
+              data.source_link
+            }</p>
           </div>
-
-          <div class="footer">Sent via Seven Tattoo Web System<br>${new Date().toLocaleString(
-            "en-US",
-            { timeZone: "America/Los_Angeles" }
-          )} (PST)</div>
         </div>
       </body>
       </html>
     `;
 
-    const msg = {
+    // 6. SEND EMAIL
+    // IMPORTANT: Both "to" and "from" are bookings@seventattoolv.com to guarantee delivery
+    await sgMail.send({
       to: "bookings@seventattoolv.com",
-      from: "no-reply@seventattoolv.com",
-      subject: `${emailTitle}: ${data.fullName}`,
+      from: "bookings@seventattoolv.com",
+      subject: `${formTitle}: ${data.fullName}`,
       html: htmlEmail,
-    };
+    });
 
-    await sgMail.send(msg);
+    console.log("--- EMAIL SENT SUCCESSFULLY ---");
 
     return {
       statusCode: 200,
@@ -111,11 +104,11 @@ exports.handler = async (event) => {
       body: JSON.stringify({ message: "Email sent successfully" }),
     };
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error("CRASH ERROR:", error); // This prints the exact error to Netlify logs
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: "Failed to send email" }),
+      body: JSON.stringify({ error: `Server Error: ${error.message}` }),
     };
   }
 };
