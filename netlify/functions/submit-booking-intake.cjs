@@ -1,29 +1,38 @@
 const sgMail = require("@sendgrid/mail");
 
 exports.handler = async (event) => {
+  // 1. HEADERS (Allows Shopify to talk to Netlify)
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
+  // 2. PRE-FLIGHT CHECK (Standard browser handshake)
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 200, headers, body: "" };
   }
 
   try {
+    // 3. SETUP SENDGRID
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+    // 4. PARSE DATA
     const data = JSON.parse(event.body);
 
-    // UPDATED LOGIC: Check for "VISION CALL INQUIRY"
-    const isVisionCall = data.placement === "VISION CALL INQUIRY";
-    // SET TITLE: Use "VISION CALL INQUIRY" for this form, "NEW VISION CALL REQUEST" for others
-    const emailTitle = isVisionCall
-      ? "VISION CALL INQUIRY"
-      : "NEW VISION CALL REQUEST";
-    // SET COLOR: Use dark grey for this form's header
-    const titleColor = isVisionCall ? "#333333" : "#000000";
+    // 5. UNIVERSAL LOGIC
+    // We look for a "formTitle" sent from the frontend.
+    // If none is sent, we default to "NEW REQUEST".
+    const formTitle = data.formTitle || "NEW VISION CALL REQUEST";
 
+    // Auto-Color: If it's an "Inquiry" or "Contact" form, use Grey headers.
+    // If it's a "Booking" or "Application", use Black headers.
+    const isInquiry =
+      formTitle.toUpperCase().includes("INQUIRY") ||
+      formTitle.toUpperCase().includes("CONTACT");
+    const titleColor = isInquiry ? "#333333" : "#000000";
+
+    // 6. BUILD THE EMAIL (Professional Studio Card Design)
     const htmlEmail = `
       <!DOCTYPE html>
       <html>
@@ -47,7 +56,7 @@ exports.handler = async (event) => {
       <body>
         <div class="container">
           <div class="header">
-            <h2>${emailTitle}</h2>
+            <h2>${formTitle}</h2>
           </div>
 
           <div class="content">
@@ -72,7 +81,7 @@ exports.handler = async (event) => {
                 data.placement
               }</span></div>
               <div class="info-row"><span class="info-cell label">Scale</span><span class="info-cell value">${
-                data.scale
+                data.scale || "N/A"
               }</span></div>
             </div>
 
@@ -87,23 +96,24 @@ exports.handler = async (event) => {
             }</div>
           </div>
 
-          <div class="footer">Sent via Seven Tattoo Web System<br>${new Date().toLocaleString(
-            "en-US",
-            { timeZone: "America/Los_Angeles" }
-          )} (PST)</div>
+          <div class="footer">
+            Sent via Seven Tattoo Web System<br>
+            ${new Date().toLocaleString("en-US", {
+              timeZone: "America/Los_Angeles",
+            })} (PST)
+          </div>
         </div>
       </body>
       </html>
     `;
 
-    const msg = {
-      to: "bookings@seventattoolv.com",
-      from: "no-reply@seventattoolv.com",
-      subject: `${emailTitle}: ${data.fullName}`,
+    // 7. SEND EMAIL VIA SENDGRID
+    await sgMail.send({
+      to: "bookings@seventattoolv.com", // Your Booking Email
+      from: "no-reply@seventattoolv.com", // Your Verified Sender
+      subject: `${formTitle}: ${data.fullName}`,
       html: htmlEmail,
-    };
-
-    await sgMail.send(msg);
+    });
 
     return {
       statusCode: 200,
