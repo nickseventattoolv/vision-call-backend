@@ -15,6 +15,7 @@ exports.handler = async (event) => {
 
   try {
     // 3. SETUP SENDGRID
+    // Make sure 'SENDGRID_API_KEY' is set in Netlify Environment Variables
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
     // 4. PARSE DATA
@@ -109,8 +110,8 @@ exports.handler = async (event) => {
 
     // 7. SEND EMAIL VIA SENDGRID
     await sgMail.send({
-      to: "bookings@seventattoolv.com", // Your Booking Email
-      from: "no-reply@seventattoolv.com", // Your Verified Sender
+      to: "bookings@seventattoolv.com", // WHERE IT GOES
+      from: "bookings@seventattoolv.com", // <--- THE FIX: Must be your verified sender
       subject: `${formTitle}: ${data.fullName}`,
       html: htmlEmail,
     });
