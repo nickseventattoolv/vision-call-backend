@@ -1,10 +1,6 @@
 const sgMail = require("@sendgrid/mail");
 
-// Make sure you have your SENDGRID_API_KEY set in Netlify Environment Variables
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
 exports.handler = async (event) => {
-  // CORS Headers (Allows your Shopify site to talk to this backend)
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -15,22 +11,19 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: "" };
   }
 
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers, body: "Method Not Allowed" };
-  }
-
   try {
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
     const data = JSON.parse(event.body);
 
-    // 1. Detect Type of Email
-    const isGeneralInquiry = data.placement === "GENERAL CONTACT INQUIRY";
-    const emailTitle = isGeneralInquiry
-      ? "GENERAL CONTACT INQUIRY"
+    // UPDATED LOGIC: Check for "VISION CALL INQUIRY"
+    const isVisionCall = data.placement === "VISION CALL INQUIRY";
+    // SET TITLE: Use "VISION CALL INQUIRY" for this form, "NEW VISION CALL REQUEST" for others
+    const emailTitle = isVisionCall
+      ? "VISION CALL INQUIRY"
       : "NEW VISION CALL REQUEST";
-    const titleColor = isGeneralInquiry ? "#333333" : "#000000"; // Dark Grey for Contact, Black for Vision
+    // SET COLOR: Use dark grey for this form's header
+    const titleColor = isVisionCall ? "#333333" : "#000000";
 
-    // 2. Build the HTML Email
-    // This uses a table structure which is the safest way to ensure emails look good in Outlook/Gmail/Apple Mail.
     const htmlEmail = `
       <!DOCTYPE html>
       <html>
@@ -58,42 +51,29 @@ exports.handler = async (event) => {
           </div>
 
           <div class="content">
-            
             <div class="info-grid">
-              <div class="info-row">
-                <span class="info-cell label">Client Name</span>
-                <span class="info-cell value">${data.fullName}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-cell label">Email</span>
-                <span class="info-cell value"><a href="mailto:${
-                  data.email
-                }" style="color: #007bff; text-decoration: none;">${
+              <div class="info-row"><span class="info-cell label">Client Name</span><span class="info-cell value">${
+                data.fullName
+              }</span></div>
+              <div class="info-row"><span class="info-cell label">Email</span><span class="info-cell value"><a href="mailto:${
+                data.email
+              }" style="color: #007bff; text-decoration: none;">${
       data.email
-    }</a></span>
-              </div>
-              <div class="info-row">
-                <span class="info-cell label">Phone</span>
-                <span class="info-cell value"><a href="tel:${
-                  data.phone
-                }" style="color: #333; text-decoration: none;">${
+    }</a></span></div>
+              <div class="info-row"><span class="info-cell label">Phone</span><span class="info-cell value"><a href="tel:${
+                data.phone
+              }" style="color: #333; text-decoration: none;">${
       data.phone
-    }</a></span>
-              </div>
-              <div class="info-row">
-                <span class="info-cell label">Requested Artist</span>
-                <span class="info-cell value">${
-                  data.artist || "Not Specified"
-                }</span>
-              </div>
-              <div class="info-row">
-                <span class="info-cell label">Placement</span>
-                <span class="info-cell value">${data.placement}</span>
-              </div>
-               <div class="info-row">
-                <span class="info-cell label">Scale</span>
-                <span class="info-cell value">${data.scale}</span>
-              </div>
+    }</a></span></div>
+              <div class="info-row"><span class="info-cell label">Requested Artist</span><span class="info-cell value">${
+                data.artist || "Not Specified"
+              }</span></div>
+              <div class="info-row"><span class="info-cell label">Placement</span><span class="info-cell value">${
+                data.placement
+              }</span></div>
+              <div class="info-row"><span class="info-cell label">Scale</span><span class="info-cell value">${
+                data.scale
+              }</span></div>
             </div>
 
             <div class="section-title">Context / Meaning</div>
@@ -102,29 +82,25 @@ exports.handler = async (event) => {
             <div class="section-title">Vision / Message</div>
             <div class="text-block">${data.vision}</div>
 
-            <div style="margin-top: 30px; font-size: 12px; color: #aaa;">
-              Source: ${data.source_link}
-            </div>
-
+            <div style="margin-top: 30px; font-size: 12px; color: #aaa;">Source: ${
+              data.source_link
+            }</div>
           </div>
 
-          <div class="footer">
-            Sent via Seven Tattoo Web System<br>
-            ${new Date().toLocaleString("en-US", {
-              timeZone: "America/Los_Angeles",
-            })} (PST)
-          </div>
+          <div class="footer">Sent via Seven Tattoo Web System<br>${new Date().toLocaleString(
+            "en-US",
+            { timeZone: "America/Los_Angeles" }
+          )} (PST)</div>
         </div>
       </body>
       </html>
     `;
 
-    // 3. Send Email via SendGrid
     const msg = {
-      to: "bookings@seventattoolv.com", // Your Booking Email
-      from: "no-reply@seventattoolv.com", // Your Verified Sender
+      to: "bookings@seventattoolv.com",
+      from: "no-reply@seventattoolv.com",
       subject: `${emailTitle}: ${data.fullName}`,
-      html: htmlEmail, // <--- This sends the Pretty HTML version
+      html: htmlEmail,
     };
 
     await sgMail.send(msg);
