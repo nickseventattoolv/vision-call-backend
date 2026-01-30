@@ -1,4 +1,10 @@
 const sgMail = require("@sendgrid/mail");
+const { createClient } = require("@supabase/supabase-js");
+
+// Initialize Supabase (Use your Service Role Key for backend access)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 exports.handler = async (event) => {
   const headers = {
@@ -14,24 +20,81 @@ exports.handler = async (event) => {
   try {
     const apiKey = process.env.SENDGRID_API_KEY;
     if (!apiKey || !apiKey.startsWith("SG.")) {
-      throw new Error("Invalid API Key");
+      throw new Error("Invalid SendGrid API Key");
     }
     sgMail.setApiKey(apiKey);
 
     const data = JSON.parse(event.body);
 
-    // 1. UNIVERSAL LOGIC
-    const formTitle = data.formTitle || "NEW VISION CALL REQUEST";
+    // --- 1. SUPABASE INTEGRATION ---
 
-    // Check if this is an "Inquiry" (Vision Call) or a "Booking" (Tattoo Appt)
+    // A. Parse Name
+    const fullName = data.fullName || "Unknown Client";
+    const nameParts = fullName.split(" ");
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(" ") || "";
+
+    // B. Find or Create Client
+    let clientId;
+
+    const { data: existingClient } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("email", data.email)
+      .single();
+
+    if (existingClient) {
+      clientId = existingClient.id;
+    } else {
+      const { data: newClient, error: clientError } = await supabase
+        .from("clients")
+        .insert([
+          {
+            first_name: firstName,
+            last_name: lastName,
+            email: data.email,
+            phone: data.phone,
+            lead_source: data.hear || "Website Form",
+          },
+        ])
+        .select()
+        .single();
+
+      if (clientError)
+        throw new Error("Error creating client: " + clientError.message);
+      clientId = newClient.id;
+    }
+
+    // C. Format Notes
+    const consolidatedNotes = `
+**PLACEMENT:** ${data.placement}
+**SCALE:** ${data.scale}
+**VISION:** ${data.vision}
+**MEANING:** ${data.meaning}
+**ARTIST REQUEST:** ${data.artist || "None"}
+**SOURCE:** ${data.source_link}
+    `.trim();
+
+    // D. Create Opportunity (Lead)
+    const { error: oppError } = await supabase.from("opportunities").insert([
+      {
+        title: `${data.placement} (${data.scale})`,
+        client_id: clientId,
+        stage: "new",
+        notes: consolidatedNotes,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (oppError)
+      throw new Error("Error creating opportunity: " + oppError.message);
+
+    // --- 2. EMAIL LOGIC (Your existing format) ---
+    const formTitle = data.formTitle || "NEW VISION CALL REQUEST";
     const isInquiry =
       formTitle.toUpperCase().includes("INQUIRY") ||
       formTitle.toUpperCase().includes("CONTACT");
-
     const titleColor = isInquiry ? "#333333" : "#000000";
-
-    // 2. DYNAMIC LABELS (The Fix)
-    // If it's an inquiry, we call the first box "Referral Details" instead of "Meaning"
     const section1Label = isInquiry
       ? "Referral / Company Info"
       : "Context / Meaning";
@@ -61,10 +124,7 @@ exports.handler = async (event) => {
       </head>
       <body>
         <div class="container">
-          <div class="header">
-            <h2>${formTitle}</h2>
-          </div>
-
+          <div class="header"><h2>${formTitle}</h2></div>
           <div class="content">
             <div class="info-grid">
               <div class="info-row"><span class="info-cell label">Client Name</span><span class="info-cell value">${
@@ -72,14 +132,10 @@ exports.handler = async (event) => {
               }</span></div>
               <div class="info-row"><span class="info-cell label">Email</span><span class="info-cell value"><a href="mailto:${
                 data.email
-              }" style="color: #007bff; text-decoration: none;">${
-      data.email
-    }</a></span></div>
+              }">${data.email}</a></span></div>
               <div class="info-row"><span class="info-cell label">Phone</span><span class="info-cell value"><a href="tel:${
                 data.phone
-              }" style="color: #333; text-decoration: none;">${
-      data.phone
-    }</a></span></div>
+              }">${data.phone}</a></span></div>
               <div class="info-row"><span class="info-cell label">Requested Artist</span><span class="info-cell value">${
                 data.artist || "Not Specified"
               }</span></div>
@@ -90,24 +146,18 @@ exports.handler = async (event) => {
                 data.scale || "N/A"
               }</span></div>
             </div>
-
             <div class="section-title">${section1Label}</div>
             <div class="text-block">${data.meaning}</div>
-
             <div class="section-title">${section2Label}</div>
             <div class="text-block">${data.vision}</div>
-
             <div style="margin-top: 30px; font-size: 12px; color: #aaa;">Source: ${
               data.source_link
             }</div>
           </div>
-
-          <div class="footer">
-            Sent via Seven Tattoo Web System<br>
-            ${new Date().toLocaleString("en-US", {
-              timeZone: "America/Los_Angeles",
-            })} (PST)
-          </div>
+          <div class="footer">Sent via Seven Tattoo Web System<br>${new Date().toLocaleString(
+            "en-US",
+            { timeZone: "America/Los_Angeles" }
+          )} (PST)</div>
         </div>
       </body>
       </html>
@@ -123,14 +173,16 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ message: "Email sent successfully" }),
+      body: JSON.stringify({
+        message: "Lead saved and email sent successfully",
+      }),
     };
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error("Error:", error);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: "Failed to send email" }),
+      body: JSON.stringify({ error: error.message }),
     };
   }
 };
