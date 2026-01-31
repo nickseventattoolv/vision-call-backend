@@ -1,7 +1,7 @@
 const sgMail = require("@sendgrid/mail");
 const { createClient } = require("@supabase/supabase-js");
 
-// Initialize Supabase (Use your Service Role Key for backend access)
+// Initialize Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -65,31 +65,25 @@ exports.handler = async (event) => {
       clientId = newClient.id;
     }
 
-    // C. Format Notes
-    const consolidatedNotes = `
-**PLACEMENT:** ${data.placement}
-**SCALE:** ${data.scale}
-**VISION:** ${data.vision}
-**MEANING:** ${data.meaning}
-**ARTIST REQUEST:** ${data.artist || "None"}
-**SOURCE:** ${data.source_link}
-    `.trim();
-
-    // D. Create Opportunity (Lead)
-    const { error: oppError } = await supabase.from("opportunities").insert([
+    // C. SAVE TO LEADS TABLE (This is the critical fix)
+    // We are now saving to 'leads', NOT 'opportunities'
+    const { error: leadError } = await supabase.from("leads").insert([
       {
-        title: `${data.placement} (${data.scale})`,
         client_id: clientId,
-        stage: "new",
-        notes: consolidatedNotes,
-        created_at: new Date().toISOString(),
+        placement: data.placement,
+        scale: data.scale,
+        vision: data.vision,
+        meaning: data.meaning,
+        artist_preference: data.artist || "None",
+        source_link: data.source_link,
+        status: "new",
+        notes: `VISION: ${data.vision}\n\nMEANING: ${data.meaning}`, // Backup summary
       },
     ]);
 
-    if (oppError)
-      throw new Error("Error creating opportunity: " + oppError.message);
+    if (leadError) throw new Error("Error creating lead: " + leadError.message);
 
-    // --- 2. EMAIL LOGIC (Your existing format) ---
+    // --- 2. EMAIL LOGIC ---
     const formTitle = data.formTitle || "NEW VISION CALL REQUEST";
     const isInquiry =
       formTitle.toUpperCase().includes("INQUIRY") ||
